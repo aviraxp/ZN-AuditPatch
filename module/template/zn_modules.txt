@@ -1,1 +1,1 @@
-name=adbd lib/lib${moduleId}.so
+name=logd lib/lib${moduleId}.so
