@@ -1,1 +1,1 @@
-allow adbd adbd process execmem
+allow logd logd process execmem
