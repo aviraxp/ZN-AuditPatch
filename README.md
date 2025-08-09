@@ -1,0 +1,1 @@
+Check https://android-review.googlesource.com/c/platform/system/logging/+/3725346 for details.
