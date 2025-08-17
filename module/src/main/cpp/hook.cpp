@@ -13,14 +13,15 @@ void *handle;
 
 static int (*old_vasprintf)(char **strp, const char *fmt, va_list ap) = nullptr;
 
-static bool is_in_quotes(const char *str, const char *pos) {
-    bool in_quote = false;
-    for (const char *p = str; p < pos; p++) {
-        if (*p == '"') {
-            in_quote = !in_quote;
+static bool has_quote_after(const char *pos, size_t match_len) {
+    const char *end = pos + match_len;
+    while (*end != '\0') {
+        if (*end == '"') {
+            return true;
         }
+        end++;
     }
-    return in_quote;
+    return false;
 }
 
 static int my_vasprintf(char **strp, const char *fmt, va_list ap) {
@@ -28,31 +29,30 @@ static int my_vasprintf(char **strp, const char *fmt, va_list ap) {
     auto result = old_vasprintf(strp, fmt, ap);
 
     if (result > 0 && *strp) {
-        const char *target_context = "tcontext=u:r:kernel:s0";
-
-        std::vector<const char *> source_contexts = {
+        constexpr std::string_view target_context = "tcontext=u:r:kernel:s0";
+        constexpr std::string_view source_contexts[] = {
                 "tcontext=u:r:su:s0",
                 "tcontext=u:r:magisk:s0"
         };
 
-        size_t target_len = strlen(target_context);
+        for (const auto &source: source_contexts) {
+            char *pos = strstr(*strp, source.data());
 
-        for (const char *source: source_contexts) {
-            char *pos = strstr(*strp, source);
-
-            if (pos && !is_in_quotes(*strp, pos)) {
-                size_t source_len = strlen(source);
-                size_t extra_space = (target_len > source_len) ? (target_len - source_len) : 0;
+            if (pos && !has_quote_after(pos, source.size())) {
+                size_t extra_space = (target_context.size() > source.size()) ?
+                                     (target_context.size() - source.size()) : 0;
 
                 // Reverse double space in case
                 char *new_str = static_cast<char *>(malloc(result + 2 * extra_space + 1));
+
                 strcpy(new_str, *strp);
                 pos = new_str + (pos - *strp);
 
-                if (source_len != target_len) {
-                    memmove(pos + target_len, pos + source_len, strlen(pos + source_len) + 1);
+                if (source.size() != target_context.size()) {
+                    memmove(pos + target_context.size(), pos + source.size(),
+                            strlen(pos + source.size()) + 1);
                 }
-                memcpy(pos, target_context, target_len);
+                memcpy(pos, target_context.data(), target_context.size());
 
                 free(*strp);
                 *strp = new_str;
