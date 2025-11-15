@@ -29,7 +29,8 @@ static int my_vasprintf(char **strp, const char *fmt, va_list ap) {
     auto result = old_vasprintf(strp, fmt, ap);
 
     if (result > 0 && *strp) {
-        constexpr std::string_view target_context = "tcontext=u:r:kernel:s0";
+        // https://cs.android.com/android/platform/superproject/main/+/main:external/selinux/libselinux/src/android/android_seapp.c;l=694
+        constexpr std::string_view target_context = "tcontext=u:r:priv_app:s0:c512,c768";
         constexpr std::string_view source_contexts[] = {
                 "tcontext=u:r:su:s0",
                 "tcontext=u:r:magisk:s0"
