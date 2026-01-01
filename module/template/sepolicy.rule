@@ -1,1 +1,2 @@
 allow logd logd process execmem
+deny domain cgroup_v2 dir search
