@@ -3,13 +3,14 @@
 #include <cstdlib>
 #include <cstdarg>
 #include <vector>
+#include <link.h>
+#include <sys/auxv.h>
 #include "zygisk_next_api.h"
 
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "zn-auditpatch", __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "zn-auditpatch", __VA_ARGS__)
 
 static ZygiskNextAPI api_table;
-void *handle;
 
 static int (*old_vasprintf)(char **strp, const char *fmt, va_list ap) = nullptr;
 
@@ -68,22 +69,24 @@ static int my_vasprintf(char **strp, const char *fmt, va_list ap) {
 void onModuleLoaded(void *self_handle, const struct ZygiskNextAPI *api) {
     memcpy(&api_table, api, sizeof(ZygiskNextAPI));
 
-    auto resolver = api_table.newSymbolResolver("libc.so", nullptr);
-    if (!resolver) return;
+    void* base = nullptr;
+    dl_iterate_phdr([](struct dl_phdr_info* info, size_t sz, void* data) -> int {
+        auto linker_base = (uintptr_t) getauxval(AT_BASE);
+        if (linker_base == info->dlpi_addr)
+            return 0;
+        *reinterpret_cast<void**>(data) = (void*) info->dlpi_addr;
+        return 1;
+    }, &base);
 
-    size_t sz;
-    auto addr = api_table.symbolLookup(resolver, "vasprintf", false, &sz);
-    api_table.freeSymbolResolver(resolver);
-
-    if (addr &&
-        api_table.inlineHook(addr, (void *) my_vasprintf, (void **) &old_vasprintf) == ZN_SUCCESS) {
-        LOGI("logd hook success");
+    auto ret = api_table.pltHook(base, "vasprintf", (void *) my_vasprintf, (void **) &old_vasprintf);
+    if (ret == ZN_SUCCESS) {
+        LOGI("logd PLT hook success");
     } else {
-        LOGE("logd hook failure");
+        LOGE("logd PLT hook failure, code: %d", ret);
     }
 }
 
-__attribute__((visibility("default")))
+__attribute__((visibility("default"), unused))
 struct ZygiskNextModule zn_module = {
         .target_api_version = ZYGISK_NEXT_API_VERSION_1,
         .onModuleLoaded = onModuleLoaded,
